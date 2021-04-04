@@ -484,12 +484,47 @@
   (jenkins-job-render jenkins-local-jobname)
   (goto-line 4))
 
+(defun jenkins-job-extract-parameters()
+  (setq jenkins-build-parameters "")
+  (setq _dom (libxml-parse-xml-region
+              (- (search-forward "<?xml") 5) (point-max)))
+  (setq _defs (dom-by-tag _dom 'parameterDefinitions))
+  (dolist (_d (dom-children _defs))
+    (setq _nv
+          (concat
+           (dom-text (dom-by-tag _d 'name))
+           "="
+           (dom-text (dom-by-tag _d 'defaultValue))))
+    (if (eq jenkins-build-parameters "")
+        (setq jenkins-build-parameters (concat "?" _nv))
+      (setq jenkins-build-parameters (concat jenkins-build-parameters "&" _nv)))))
+
+(defun jenkins-job-get-build-parameters (jobname)
+  "Get build parameters for JOBNAME."
+  (let ((url-request-extra-headers (jenkins--get-auth-headers))
+        (url-request-method "GET")
+        (config-url (format "%s/%s/config.xml" (get-jenkins-url)
+           (mapconcat (lambda (a) (concat "job/" a)) (reverse *jenkins-breadcrumbs*) "/"))))
+    (url-retrieve config-url (lambda (status) (jenkins-job-extract-parameters)))))
+
 (defun jenkins-job-call-build (jobname)
   "Call jenkins build JOBNAME function."
+  (jenkins-job-get-build-parameters jobname)
+  (message "jenkins-build-parameters %s" jenkins-build-parameters)
+  (if (eq jenkins-build-parameters "")
+      (setq _build "build")
+    (setq _build "buildWithParameters"))
   (let ((url-request-extra-headers (jenkins--get-auth-headers))
         (url-request-method "POST")
-        (build-url (format "%s/%s/build" (get-jenkins-url)
-           (mapconcat (lambda (a) (concat "job/" a)) (reverse *jenkins-breadcrumbs*) "/"))))
+        (build-url (format "%s/%s/%s"
+                           (get-jenkins-url)
+                           (mapconcat (lambda (a) (concat "job/" a)) (reverse *jenkins-breadcrumbs*) "/")
+                           _build)))
+    (when (not (string-empty-p jenkins-build-parameters))
+      (setq build-url
+            (format "%s%s" build-url
+                    (read-string "Build parameters: " jenkins-build-parameters))))
+    (message "build-url %s" build-url)
     (when (y-or-n-p (format "Ready to start %s?" jobname))
       (with-current-buffer (url-retrieve-synchronously build-url)
         (message (format "Building %s job started!" jobname))))))
