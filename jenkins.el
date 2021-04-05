@@ -510,21 +510,19 @@
 (defun jenkins-job-call-build (jobname)
   "Call jenkins build JOBNAME function."
   (jenkins-job-get-build-parameters jobname)
-  (message "jenkins-build-parameters %s" jenkins-build-parameters)
   (if (eq jenkins-build-parameters "")
       (setq _build "build")
     (setq _build "buildWithParameters"))
   (let ((url-request-extra-headers (jenkins--get-auth-headers))
         (url-request-method "POST")
         (build-url (format "%s/%s/%s"
-                           (get-jenkins-url)
-                           (mapconcat (lambda (a) (concat "job/" a)) (reverse *jenkins-breadcrumbs*) "/")
-                           _build)))
+           (get-jenkins-url)
+           (mapconcat (lambda (a) (concat "job/" a)) (reverse *jenkins-breadcrumbs*) "/")
+           _build)))
     (when (not (string-empty-p jenkins-build-parameters))
       (setq build-url
             (format "%s%s" build-url
                     (read-string "Build parameters: " jenkins-build-parameters))))
-    (message "build-url %s" build-url)
     (when (y-or-n-p (format "Ready to start %s?" jobname))
       (with-current-buffer (url-retrieve-synchronously build-url)
         (message (format "Building %s job started!" jobname))))))
